@@ -618,7 +618,7 @@ function DashboardView({ dashboard, logs, onRefresh }) {
                 <tr key={log._id} className="border-b border-[#efefef]">
                   <td className="p-2">{fmtTime(log.createdAt)}</td>
                   <td className="p-2">{log.action}</td>
-                  <td className="p-2">{log.actor?.name || log.actor?.email || "-"}</td>
+                  <td className="p-2">{log.actor?.name || log.actor?.email || "unknown"}</td>
                   <td className="p-2"><SeverityPill severity={log.severity} /></td>
                   <td className="p-2">{fmtIp(log)}</td>
                 </tr>
@@ -666,6 +666,27 @@ function EmployeesView({
 }) {
   const canManage = ["Admin", "HR Manager"].includes(role);
   const canEditStatus = role === "Admin";
+  const getStatusPill = (row) => {
+    if (row.accountState === "System Blocked") {
+      return (
+        <span className="border px-2 py-0.5 text-orange-700 border-orange-200">
+          SYSTEM BLOCKED
+        </span>
+      );
+    }
+    if (row.status === "Inactive") {
+      return (
+        <span className="border px-2 py-0.5 text-red-700 border-red-200">
+          INACTIVE
+        </span>
+      );
+    }
+    return (
+      <span className="border px-2 py-0.5 text-[#1f7a1f] border-[#b7dfb7]">
+        ACTIVE
+      </span>
+    );
+  };
   return (
     <section>
       <div className="flex items-center justify-between mb-3">
@@ -769,9 +790,7 @@ function EmployeesView({
                         <option value="Inactive">Inactive</option>
                       </select>
                     ) : (
-                      <span className={`border px-2 py-0.5 ${row.status === "Inactive" ? "text-red-700 border-red-200" : "text-[#1f7a1f] border-[#b7dfb7]"}`}>
-                        {(row.status || "Active").toUpperCase()}
-                      </span>
+                      getStatusPill(row)
                     )}
                   </td>
                   <td className="p-2 text-slate-500">
@@ -869,7 +888,7 @@ function LogsTable({ logs }) {
                 <td className="p-2"><SeverityPill severity={log.severity} /></td>
                 <td className="p-2">{log.message || "-"}</td>
                 <td className="p-2">{fmtIp(log)}</td>
-                <td className="p-2">{log.actor?.name || log.actor?.email || "-"}</td>
+                <td className="p-2">{log.actor?.name || log.actor?.email || "unknown"}</td>
               </tr>
             ))
           )}

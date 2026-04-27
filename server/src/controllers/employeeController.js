@@ -36,17 +36,25 @@ export const addEmployee = async (req, res) => {
 
 export const getEmployees = async (req, res) => {
   try {
-    const employees = await User.find().select("-password");
-    if (employees.length > Number(process.env.BULK_ACCESS_THRESHOLD || 30)) {
+    const employees = await User.find().select("-password").lean();
+    const now = new Date();
+    const employeesWithState = employees.map((employee) => {
+      const isSystemBlocked = employee.lockedUntil && new Date(employee.lockedUntil) > now;
+      return {
+        ...employee,
+        accountState: isSystemBlocked ? "System Blocked" : employee.status || "Active",
+      };
+    });
+    if (employeesWithState.length > Number(process.env.BULK_ACCESS_THRESHOLD || 30)) {
       await logAudit({
         actor: req.user._id,
         action: "SUSPICIOUS_LARGE_DATA_ACCESS",
-        metadata: { count: employees.length },
+        metadata: { count: employeesWithState.length },
         ip: req.ip,
         severity: "warning",
       });
     }
-    return ok(res, "Employees fetched successfully", employees);
+    return ok(res, "Employees fetched successfully", employeesWithState);
   } catch (error) {
     return fail(res, "Failed to fetch employees", 500, error.message);
   }
@@ -79,7 +87,18 @@ export const updateEmployee = async (req, res) => {
     if (req.body?.status && req.user.role !== "Admin") {
       return fail(res, "Only admin can update employee status", 403);
     }
-    const updated = await User.findByIdAndUpdate(id, req.body, {
+    const payload = { ...(req.body || {}) };
+    const current = await User.findById(id);
+    if (!current) return fail(res, "Employee not found", 404);
+
+    // Admin "Active" should immediately restore login access even if system lock existed.
+    if (req.user.role === "Admin" && payload.status === "Active") {
+      payload.lockedUntil = null;
+      payload.failedLoginAttempts = 0;
+    }
+
+    // Keep system lock state untouched when admin marks user inactive; login stays blocked anyway.
+    const updated = await User.findByIdAndUpdate(id, payload, {
       new: true,
       runValidators: true,
     }).select("-password");
@@ -88,7 +107,7 @@ export const updateEmployee = async (req, res) => {
     await logAudit({
       actor: req.user._id,
       action: "EMPLOYEE_UPDATED",
-      metadata: { employeeId: id, changes: Object.keys(req.body || {}) },
+      metadata: { employeeId: id, changes: Object.keys(payload || {}) },
       ip: req.ip,
     });
 

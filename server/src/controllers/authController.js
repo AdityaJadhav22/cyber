@@ -21,6 +21,9 @@ const normalizeRole = (value = "") => {
 const loginAttemptByIp = new Map();
 const bruteForceWindowMs = 5 * 60 * 1000;
 const bruteForceThreshold = 5;
+const accountLockMs = 10 * 60 * 1000;
+
+const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const registerFailedAttempt = async (ip, email, userId) => {
   const now = Date.now();
@@ -82,7 +85,13 @@ export const signup = async (req, res) => {
 export const login = async (req, res) => {
   try {
     const { email, password, mfaCode } = req.body;
-    const user = await User.findOne({ email });
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    let user = await User.findOne({ email: normalizedEmail });
+    if (!user && normalizedEmail) {
+      user = await User.findOne({
+        email: { $regex: `^${escapeRegex(normalizedEmail)}$`, $options: "i" },
+      });
+    }
     if (!user) {
       await registerFailedAttempt(req.ip, email, null);
       await logEvent({
@@ -99,12 +108,12 @@ export const login = async (req, res) => {
       await logEvent({
         userId: user._id,
         action: "LOGIN_BLOCKED_INACTIVE_USER",
-        message: "Inactive account attempted to login",
+        message: "Login blocked because admin deactivated this account",
         ip: req.ip,
         severity: "HIGH",
         metadata: { email },
       });
-      return fail(res, "Account is inactive. Contact admin.", 403);
+      return fail(res, "Admin has deactivated this account. Please contact admin.", 403);
     }
 
     // Logs every login attempt for accountability and security monitoring.
@@ -116,7 +125,24 @@ export const login = async (req, res) => {
     });
 
     if (user.lockedUntil && user.lockedUntil > new Date()) {
-      return fail(res, "Account temporarily locked due to failed logins", 423);
+      await logEvent({
+        userId: user._id,
+        action: "BRUTE_FORCE_LOCKOUT_ACTIVE",
+        message: "System blocked this account due to multiple failed login attempts",
+        ip: req.ip,
+        severity: "CRITICAL",
+        metadata: {
+          email: user.email,
+          lockedUntil: user.lockedUntil,
+        },
+      });
+      return fail(res, "System has blocked this account due to multiple failed attempts. Please try again later or contact admin.", 423);
+    }
+
+    // Reset stale lock/counter once lock duration has elapsed so users can login again.
+    if (user.lockedUntil && user.lockedUntil <= new Date()) {
+      user.lockedUntil = null;
+      user.failedLoginAttempts = 0;
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -124,10 +150,11 @@ export const login = async (req, res) => {
       await registerFailedAttempt(req.ip, email, user._id);
       user.failedLoginAttempts += 1;
       if (user.failedLoginAttempts >= 5) {
-        user.lockedUntil = new Date(Date.now() + 10 * 60 * 1000);
+        user.lockedUntil = new Date(Date.now() + accountLockMs);
         await logAudit({
           actor: user._id,
           action: "SUSPICIOUS_MULTIPLE_FAILED_LOGINS",
+          message: "Brute-force pattern detected: account temporarily locked",
           metadata: { attempts: user.failedLoginAttempts, email },
           ip: req.ip,
           severity: "critical",
