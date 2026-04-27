@@ -1,12 +1,13 @@
 import User from "../models/User.js";
 import { logAudit } from "../utils/audit.js";
 import bcrypt from "bcryptjs";
+import { fail, ok } from "../utils/response.js";
 
 export const addEmployee = async (req, res) => {
   try {
     const { name, email, password, salary, address, department, role } = req.body;
     const existing = await User.findOne({ email });
-    if (existing) return res.status(409).json({ message: "Employee email already exists" });
+    if (existing) return fail(res, "Employee email already exists", 409);
 
     const hashedPassword = await bcrypt.hash(password, 12);
     const employee = await User.create({
@@ -26,9 +27,10 @@ export const addEmployee = async (req, res) => {
       ip: req.ip,
     });
 
-    res.status(201).json(employee);
+    const safeEmployee = await User.findById(employee._id).select("-password");
+    return ok(res, "Employee created successfully", safeEmployee, 201);
   } catch (error) {
-    res.status(500).json({ message: "Failed to add employee", error: error.message });
+    return fail(res, "Failed to add employee", 500, error.message);
   }
 };
 
@@ -44,25 +46,44 @@ export const getEmployees = async (req, res) => {
         severity: "warning",
       });
     }
-    res.json(employees);
+    return ok(res, "Employees fetched successfully", employees);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch employees", error: error.message });
+    return fail(res, "Failed to fetch employees", 500, error.message);
   }
 };
 
 export const getMyProfile = async (req, res) => {
   const me = await User.findById(req.user._id).select("-password");
-  res.json(me);
+  return ok(res, "Profile fetched successfully", me);
+};
+
+export const updateMyProfile = async (req, res) => {
+  try {
+    const allowedUpdates = ["name", "address"];
+    const payload = Object.fromEntries(
+      Object.entries(req.body || {}).filter(([key]) => allowedUpdates.includes(key))
+    );
+    const updated = await User.findByIdAndUpdate(req.user._id, payload, {
+      new: true,
+      runValidators: true,
+    }).select("-password");
+    return ok(res, "Profile updated successfully", updated);
+  } catch (error) {
+    return fail(res, "Failed to update profile", 500, error.message);
+  }
 };
 
 export const updateEmployee = async (req, res) => {
   try {
     const { id } = req.params;
+    if (req.body?.status && req.user.role !== "Admin") {
+      return fail(res, "Only admin can update employee status", 403);
+    }
     const updated = await User.findByIdAndUpdate(id, req.body, {
       new: true,
       runValidators: true,
     }).select("-password");
-    if (!updated) return res.status(404).json({ message: "Employee not found" });
+    if (!updated) return fail(res, "Employee not found", 404);
 
     await logAudit({
       actor: req.user._id,
@@ -71,9 +92,9 @@ export const updateEmployee = async (req, res) => {
       ip: req.ip,
     });
 
-    res.json(updated);
+    return ok(res, "Employee updated successfully", updated);
   } catch (error) {
-    res.status(500).json({ message: "Failed to update employee", error: error.message });
+    return fail(res, "Failed to update employee", 500, error.message);
   }
 };
 
@@ -81,7 +102,7 @@ export const deleteEmployee = async (req, res) => {
   try {
     const { id } = req.params;
     const deleted = await User.findByIdAndDelete(id);
-    if (!deleted) return res.status(404).json({ message: "Employee not found" });
+    if (!deleted) return fail(res, "Employee not found", 404);
 
     await logAudit({
       actor: req.user._id,
@@ -91,8 +112,8 @@ export const deleteEmployee = async (req, res) => {
       severity: "warning",
     });
 
-    res.json({ message: "Employee deleted" });
+    return ok(res, "Employee deleted successfully");
   } catch (error) {
-    res.status(500).json({ message: "Failed to delete employee", error: error.message });
+    return fail(res, "Failed to delete employee", 500, error.message);
   }
 };

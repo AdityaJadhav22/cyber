@@ -10,6 +10,10 @@ import payrollRoutes from "./routes/payrollRoutes.js";
 import leaveRoutes from "./routes/leaveRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import securityRoutes from "./routes/securityRoutes.js";
+import logRoutes from "./routes/logRoutes.js";
+import { detectRapidRequests } from "./middleware/anomaly.js";
+import { detectInjectionAttempts } from "./middleware/threatDetection.js";
+import { fail } from "./utils/response.js";
 
 const app = express();
 connectDB();
@@ -26,6 +30,8 @@ app.use(
 );
 app.use(express.json({ limit: "100kb" }));
 app.use(morgan("combined"));
+app.use(detectRapidRequests);
+app.use(detectInjectionAttempts);
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 app.use("/api/auth", authRoutes);
@@ -33,11 +39,12 @@ app.use("/api/employees", employeeRoutes);
 app.use("/api/payroll", payrollRoutes);
 app.use("/api/leaves", leaveRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/logs", logRoutes);
 app.use("/api", securityRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
-  res.status(500).json({ message: "Internal server error" });
+  return fail(res, "Internal server error", 500);
 });
 
 const PORT = process.env.PORT || 5000;

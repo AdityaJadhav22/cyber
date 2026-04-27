@@ -1,9 +1,12 @@
-import AuditLog from "../models/AuditLog.js";
+import { logEvent } from "./securityLogger.js";
 
-export const logAudit = async ({ actor, action, metadata = {}, ip = "", severity = "info" }) => {
-  try {
-    await AuditLog.create({ actor, action, metadata, ip, severity });
-  } catch (error) {
-    console.error("Failed to write audit log:", error.message);
-  }
-};
+// Backward-compatible wrapper used by existing controllers.
+export const logAudit = async ({ actor, action, message = "", metadata = {}, ip = "", severity = "info" }) =>
+  logEvent({
+    userId: actor,
+    action,
+    message,
+    metadata,
+    ip,
+    severity,
+  });

@@ -1,13 +1,16 @@
 import { logAudit } from "../utils/audit.js";
+import { fail } from "../utils/response.js";
 
 export const fakeSalaryCanary = async (req, res) => {
+  // Canary token endpoint: any access is treated as suspicious reconnaissance.
   await logAudit({
     actor: req.user?._id,
-    action: "CANARY_TOKEN_TRIGGERED",
+    action: "CANARY_TRIGGERED",
+    message: "Unauthorized access to fake endpoint",
     metadata: { endpoint: "/api/fake-salary" },
     ip: req.ip,
     severity: "critical",
   });
 
-  res.status(403).json({ message: "Alert generated: unauthorized canary endpoint access logged" });
+  return fail(res, "Forbidden", 403);
 };

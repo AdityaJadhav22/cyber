@@ -1,7 +1,13 @@
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { forgotPassword, login, resetPassword, signup } from "../controllers/authController.js";
-import { validateInput } from "../middleware/validate.js";
+import { handleValidation, sanitizeBody } from "../middleware/validate.js";
+import {
+  forgotPasswordValidation,
+  loginValidation,
+  resetPasswordValidation,
+  signupValidation,
+} from "../validators/authValidators.js";
 
 const router = express.Router();
 
@@ -13,9 +19,9 @@ const loginLimiter = rateLimit({
   message: "Too many login attempts. Please retry later.",
 });
 
-router.post("/signup", validateInput(["name", "email", "password"]), signup);
-router.post("/login", loginLimiter, validateInput(["email", "password", "mfaCode"]), login);
-router.post("/forgot-password", validateInput(["email"]), forgotPassword);
-router.post("/reset-password", validateInput(["resetToken", "newPassword", "mfaCode"]), resetPassword);
+router.post("/signup", sanitizeBody, signupValidation, handleValidation, signup);
+router.post("/login", loginLimiter, sanitizeBody, loginValidation, handleValidation, login);
+router.post("/forgot-password", sanitizeBody, forgotPasswordValidation, handleValidation, forgotPassword);
+router.post("/reset-password", sanitizeBody, resetPasswordValidation, handleValidation, resetPassword);
 
 export default router;

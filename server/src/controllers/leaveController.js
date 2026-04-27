@@ -1,5 +1,6 @@
 import Leave from "../models/Leave.js";
 import { logAudit } from "../utils/audit.js";
+import { fail, ok } from "../utils/response.js";
 
 export const applyLeave = async (req, res) => {
   try {
@@ -17,15 +18,19 @@ export const applyLeave = async (req, res) => {
       ip: req.ip,
     });
 
-    res.status(201).json(leave);
+    return ok(res, "Leave request submitted", leave, 201);
   } catch (error) {
-    res.status(500).json({ message: "Failed to apply leave", error: error.message });
+    return fail(res, "Failed to apply leave", 500, error.message);
   }
 };
 
 export const getMyLeaves = async (req, res) => {
-  const leaves = await Leave.find({ employee: req.user._id });
-  res.json(leaves);
+  try {
+    const leaves = await Leave.find({ employee: req.user._id });
+    return ok(res, "Leave records fetched successfully", leaves);
+  } catch (error) {
+    return fail(res, "Failed to fetch leave records", 500, error.message);
+  }
 };
 
 export const reviewLeave = async (req, res) => {
@@ -33,7 +38,7 @@ export const reviewLeave = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
     if (!["Approved", "Rejected"].includes(status)) {
-      return res.status(400).json({ message: "Invalid leave status" });
+      return fail(res, "Invalid leave status", 400);
     }
 
     const leave = await Leave.findByIdAndUpdate(
@@ -41,7 +46,7 @@ export const reviewLeave = async (req, res) => {
       { status, reviewedBy: req.user._id },
       { new: true }
     );
-    if (!leave) return res.status(404).json({ message: "Leave request not found" });
+    if (!leave) return fail(res, "Leave request not found", 404);
 
     await logAudit({
       actor: req.user._id,
@@ -50,13 +55,17 @@ export const reviewLeave = async (req, res) => {
       ip: req.ip,
     });
 
-    res.json(leave);
+    return ok(res, "Leave request reviewed successfully", leave);
   } catch (error) {
-    res.status(500).json({ message: "Failed to review leave", error: error.message });
+    return fail(res, "Failed to review leave", 500, error.message);
   }
 };
 
 export const getAllLeaves = async (_req, res) => {
-  const leaves = await Leave.find().populate("employee", "name email department");
-  res.json(leaves);
+  try {
+    const leaves = await Leave.find().populate("employee", "name email department");
+    return ok(res, "All leave records fetched successfully", leaves);
+  } catch (error) {
+    return fail(res, "Failed to fetch leave records", 500, error.message);
+  }
 };

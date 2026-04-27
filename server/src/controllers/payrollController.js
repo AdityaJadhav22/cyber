@@ -1,9 +1,14 @@
 import User from "../models/User.js";
 import { logAudit } from "../utils/audit.js";
+import { fail, ok } from "../utils/response.js";
 
 export const getPayroll = async (req, res) => {
-  const records = await User.find().select("name email department role salary");
-  res.json(records);
+  try {
+    const records = await User.find().select("name email department role salary");
+    return ok(res, "Payroll records fetched successfully", records);
+  } catch (error) {
+    return fail(res, "Failed to fetch payroll records", 500, error.message);
+  }
 };
 
 export const updateSalary = async (req, res) => {
@@ -15,7 +20,7 @@ export const updateSalary = async (req, res) => {
       { salary: Number(salary) },
       { new: true, runValidators: true }
     ).select("name email salary role");
-    if (!employee) return res.status(404).json({ message: "Employee not found" });
+    if (!employee) return fail(res, "Employee not found", 404);
 
     await logAudit({
       actor: req.user._id,
@@ -25,8 +30,8 @@ export const updateSalary = async (req, res) => {
       severity: "warning",
     });
 
-    res.json(employee);
+    return ok(res, "Salary updated successfully", employee);
   } catch (error) {
-    res.status(500).json({ message: "Failed to update salary", error: error.message });
+    return fail(res, "Failed to update salary", 500, error.message);
   }
 };

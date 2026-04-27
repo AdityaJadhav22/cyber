@@ -1,29 +1,49 @@
+import { validationResult } from "express-validator";
+import { fail } from "../utils/response.js";
+
 const noSqlPattern = /\$where|\$ne|\$gt|\$lt|\$regex|\$or|\$and/i;
 
-const cleanValue = (value) => {
-  if (typeof value === "string") return value.trim();
-  return value;
+const sanitizeRecursively = (input) => {
+  if (Array.isArray(input)) return input.map(sanitizeRecursively);
+  if (input && typeof input === "object") {
+    const safeObject = {};
+    for (const [key, value] of Object.entries(input)) {
+      if (key.startsWith("$")) {
+        throw new Error("Potential NoSQL injection key detected");
+      }
+      safeObject[key] = sanitizeRecursively(value);
+    }
+    return safeObject;
+  }
+  if (typeof input === "string") {
+    const trimmed = input.trim();
+    if (noSqlPattern.test(trimmed)) {
+      throw new Error("Potential NoSQL injection pattern detected");
+    }
+    return trimmed;
+  }
+  return input;
 };
 
-export const validateInput = (requiredFields = []) => (req, res, next) => {
-  const payload = req.body || {};
-
-  for (const field of requiredFields) {
-    if (payload[field] === undefined || payload[field] === null || payload[field] === "") {
-      return res.status(400).json({ message: `Missing required field: ${field}` });
-    }
+// Sanitizes incoming body payload to reduce injection risk before controllers run.
+export const sanitizeBody = (req, res, next) => {
+  try {
+    req.body = sanitizeRecursively(req.body || {});
+    next();
+  } catch (error) {
+    return fail(res, error.message, 400);
   }
+};
 
-  for (const [key, rawValue] of Object.entries(payload)) {
-    const value = cleanValue(rawValue);
-
-    if (typeof value === "string" && noSqlPattern.test(value)) {
-      return res.status(400).json({ message: `Potential injection payload detected in ${key}` });
-    }
-    if (typeof key === "string" && key.startsWith("$")) {
-      return res.status(400).json({ message: "Potential NoSQL injection key detected" });
-    }
+export const handleValidation = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return fail(
+      res,
+      "Validation failed",
+      400,
+      errors.array().map((err) => ({ field: err.path, message: err.msg }))
+    );
   }
-
   next();
 };

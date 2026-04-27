@@ -14,8 +14,13 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true, minlength: 8 },
     role: {
       type: String,
-      enum: ["Admin", "HR Manager", "Employee", "Auditor"],
+      enum: ["Admin", "HR Manager", "Employee"],
       default: "Employee",
+    },
+    status: {
+      type: String,
+      enum: ["Active", "Inactive"],
+      default: "Active",
     },
     department: { type: String, trim: true, maxlength: 80, default: "" },
     salary: { type: Number, min: 0, default: 0 },

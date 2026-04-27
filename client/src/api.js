@@ -10,9 +10,13 @@ export const apiRequest = async (path, { method = "GET", body, token } = {}) => 
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const data = await response.json().catch(() => ({}));
+  const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.message || "Request failed");
+    throw new Error(payload.message || "Request failed");
   }
-  return data;
+  // Unified API response contract from backend: { success, message, data }.
+  if (payload && typeof payload === "object" && "success" in payload) {
+    return payload.data ?? {};
+  }
+  return payload;
 };
