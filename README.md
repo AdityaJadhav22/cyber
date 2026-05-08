@@ -77,3 +77,34 @@ server/
 
 Use a reverse proxy (Nginx/Caddy) with TLS certificate and forward traffic to the Node app on internal HTTP.
 Set secure CORS origin and strong `JWT_SECRET` in production.
+
+## Deploy Online (Vercel + Render + Atlas)
+
+### 1) Backend on Render
+
+- Push this repo to GitHub (already done)
+- In Render, create a **Web Service** from this repo
+- Render will auto-detect `render.yaml` from repo root
+- Set secret env vars in Render dashboard:
+  - `MONGO_URI` = MongoDB Atlas connection string
+  - `JWT_SECRET` = strong random secret
+  - `CLIENT_ORIGIN` = your Vercel frontend URL (example: `https://your-app.vercel.app`)
+- After deploy, verify backend health:
+  - `https://<render-service>.onrender.com/api/health`
+
+### 2) Frontend on Vercel
+
+- Import this same repo to Vercel
+- Set **Root Directory** to `client`
+- Build settings:
+  - Build command: `npm run build`
+  - Output directory: `dist`
+- Add environment variable:
+  - `VITE_API_URL` = `https://<render-service>.onrender.com/api`
+- Deploy
+
+### 3) Final Check
+
+- Open your Vercel URL
+- Test login, dashboard, employee actions, and leave flow
+- Ensure there are no CORS errors in browser console

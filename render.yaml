@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: cyber-hrms-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 1h
+      - key: SESSION_TIMEOUT_MS
+        value: 900000
+      - key: BULK_ACCESS_THRESHOLD
+        value: 30
+      - key: DEMO_SHOW_RESET_TOKEN
+        value: false
+      - key: CLIENT_ORIGIN
+        sync: false
