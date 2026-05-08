@@ -16,7 +16,6 @@ import { detectInjectionAttempts } from "./middleware/threatDetection.js";
 import { fail } from "./utils/response.js";
 
 const app = express();
-connectDB();
 
 // Security headers and policy hardening.
 app.use(helmet());
@@ -48,7 +47,15 @@ app.use((err, _req, res, _next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
-  console.log("HTTPS-ready note: place app behind reverse proxy (Nginx/Caddy) with TLS cert.");
-});
+
+const startServer = async () => {
+  // Load env values from .env (already initialized by "dotenv/config" import) and connect first.
+  await connectDB();
+
+  app.listen(PORT, () => {
+    console.log(`Server listening on http://localhost:${PORT}`);
+    console.log("HTTPS-ready note: place app behind reverse proxy (Nginx/Caddy) with TLS cert.");
+  });
+};
+
+startServer();

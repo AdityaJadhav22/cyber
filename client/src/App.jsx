@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { apiRequest } from "./api";
 
 const navByRole = {
-  Admin: ["dashboard", "employees", "audit-logs", "security-alerts", "my-profile"],
-  "HR Manager": ["employees", "my-profile"],
-  Employee: ["my-profile"],
+  Admin: ["dashboard", "employees", "leaves", "audit-logs", "security-alerts", "my-profile"],
+  "HR Manager": ["employees", "leaves", "my-profile"],
+  Employee: ["leaves", "my-profile"],
 };
 
 const useAuth = () => {
@@ -310,6 +310,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [employees, setEmployees] = useState([]);
+  const [leaves, setLeaves] = useState([]);
   const [logs, setLogs] = useState([]);
   const [dashboard, setDashboard] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -333,6 +334,11 @@ function App() {
     salary: 0,
     status: "Active",
   });
+  const [leaveForm, setLeaveForm] = useState({
+    fromDate: "",
+    toDate: "",
+    reason: "",
+  });
 
   const menu = useMemo(() => navByRole[auth.user?.role] || ["my-profile"], [auth.user?.role]);
 
@@ -355,6 +361,14 @@ function App() {
       if (["Admin", "HR Manager"].includes(auth.user.role)) {
         const employeesData = await apiRequest("/employees", { token: auth.token }).catch(() => []);
         setEmployees(employeesData);
+      }
+
+      if (auth.user.role === "Employee") {
+        const myLeaves = await apiRequest("/leaves/mine", { token: auth.token }).catch(() => []);
+        setLeaves(myLeaves);
+      } else if (["Admin", "HR Manager"].includes(auth.user.role)) {
+        const allLeaves = await apiRequest("/leaves", { token: auth.token }).catch(() => []);
+        setLeaves(allLeaves);
       }
 
       const me = await apiRequest("/employees/me", { token: auth.token }).catch(() => null);
@@ -482,6 +496,36 @@ function App() {
     }
   };
 
+  const applyLeave = async (event) => {
+    event.preventDefault();
+    setError("");
+    try {
+      await apiRequest("/leaves", {
+        method: "POST",
+        token: auth.token,
+        body: leaveForm,
+      });
+      setLeaveForm({ fromDate: "", toDate: "", reason: "" });
+      await loadData();
+    } catch (err) {
+      setError(err.message || "Failed to apply leave");
+    }
+  };
+
+  const reviewLeave = async (leaveId, status) => {
+    setError("");
+    try {
+      await apiRequest(`/leaves/${leaveId}/review`, {
+        method: "PUT",
+        token: auth.token,
+        body: { status },
+      });
+      await loadData();
+    } catch (err) {
+      setError(err.message || "Failed to review leave");
+    }
+  };
+
   useEffect(() => {
     if (!auth.user) return;
     setView(auth.user.role === "Admin" ? "dashboard" : auth.user.role === "HR Manager" ? "employees" : "my-profile");
@@ -571,6 +615,16 @@ function App() {
               <AuditLogsView logs={logs} filters={filters} setFilters={setFilters} onRefresh={refreshLogs} />
             ) : null}
             {view === "security-alerts" && auth.user.role === "Admin" ? <SecurityAlertsView logs={logs} onRefresh={refreshLogs} /> : null}
+            {view === "leaves" ? (
+              <LeavesView
+                role={auth.user.role}
+                leaves={leaves}
+                leaveForm={leaveForm}
+                setLeaveForm={setLeaveForm}
+                onApply={applyLeave}
+                onReview={reviewLeave}
+              />
+            ) : null}
             {view === "my-profile" ? <MyProfileView user={profile || auth.user} onSave={updateMyProfile} /> : null}
           </div>
         </main>
@@ -857,6 +911,91 @@ function SecurityAlertsView({ logs, onRefresh }) {
         <button onClick={onRefresh} className="border border-[#bcbcbc] px-3 py-2 text-sm hover:bg-slate-50">Refresh</button>
       </div>
       <LogsTable logs={rows} />
+    </section>
+  );
+}
+
+function LeavesView({ role, leaves, leaveForm, setLeaveForm, onApply, onReview }) {
+  const canApply = role === "Employee";
+  const canReview = ["Admin", "HR Manager"].includes(role);
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.24em] text-slate-500">Time Off</p>
+          <h3 className="text-3xl font-bold">Leave Management</h3>
+        </div>
+      </div>
+
+      {canApply ? (
+        <form onSubmit={onApply} className="border border-[#bcbcbc] p-4 mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <input
+            type="date"
+            className="border p-2"
+            value={leaveForm.fromDate}
+            onChange={(e) => setLeaveForm((prev) => ({ ...prev, fromDate: e.target.value }))}
+            required
+          />
+          <input
+            type="date"
+            className="border p-2"
+            value={leaveForm.toDate}
+            onChange={(e) => setLeaveForm((prev) => ({ ...prev, toDate: e.target.value }))}
+            required
+          />
+          <input
+            className="border p-2"
+            placeholder="Reason"
+            value={leaveForm.reason}
+            onChange={(e) => setLeaveForm((prev) => ({ ...prev, reason: e.target.value }))}
+            required
+          />
+          <button className="md:col-span-3 bg-black text-white border border-black px-4 py-2">Apply Leave</button>
+        </form>
+      ) : null}
+
+      <div className="border border-[#bcbcbc] overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-[#bcbcbc]">
+              <th className="text-left p-2">From</th>
+              <th className="text-left p-2">To</th>
+              <th className="text-left p-2">Reason</th>
+              <th className="text-left p-2">Status</th>
+              <th className="text-left p-2">Employee</th>
+              <th className="text-left p-2">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {leaves.length === 0 ? (
+              <tr>
+                <td className="p-4 text-center text-slate-500" colSpan={6}>No leave records</td>
+              </tr>
+            ) : (
+              leaves.map((leave) => (
+                <tr key={leave._id} className="border-b border-[#efefef]">
+                  <td className="p-2">{fmtTime(leave.fromDate)}</td>
+                  <td className="p-2">{fmtTime(leave.toDate)}</td>
+                  <td className="p-2">{leave.reason || "-"}</td>
+                  <td className="p-2">{leave.status || "Pending"}</td>
+                  <td className="p-2">{leave.employee?.name || leave.employee?.email || "me"}</td>
+                  <td className="p-2">
+                    {canReview && leave.status === "Pending" ? (
+                      <div className="flex gap-2">
+                        <button onClick={() => onReview(leave._id, "Approved")} className="border border-[#bcbcbc] px-2 py-0.5 hover:bg-slate-100">Approve</button>
+                        <button onClick={() => onReview(leave._id, "Rejected")} className="border border-[#bcbcbc] px-2 py-0.5 hover:bg-slate-100">Reject</button>
+                      </div>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
